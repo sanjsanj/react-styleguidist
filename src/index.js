@@ -3,19 +3,11 @@
 import './polyfills';
 import React from 'react';
 import ReactDOM from 'react-dom';
-import isFinite from 'lodash/isFinite';
 import slots from 'rsg-components/slots';
 import StyleGuide from 'rsg-components/StyleGuide';
-import {
-	getInfoFromHash,
-	filterComponentExamples,
-	filterSectionExamples,
-	filterComponentsInSectionsByExactName,
-	findSection,
-	processSections,
-	setSlugs,
-	slugger,
-} from './utils/utils';
+import getPageTitle from './utils/getPageTitle';
+import getRouteData from './utils/getRouteData';
+import globalizeComponents from './utils/globalizeComponents';
 import './styles';
 
 // Examples code revision to rerender only code examples (not the whole page) when code changes
@@ -25,63 +17,21 @@ function renderStyleguide() {
 	// eslint-disable-next-line import/no-unresolved
 	const styleguide = require('!!../loaders/styleguide-loader!./index.js');
 
-	let sections = processSections(styleguide.sections);
+	const { hash } = window.location;
 
-	// Parse URL hash to check if the components list must be filtered
-	const {
-		// Name of the filtered component/section to show isolated (/#!/Button → Button)
-		targetName,
-		// Index of the fenced block example of the filtered component isolate (/#!/Button/1 → 1)
-		targetIndex,
-	} = getInfoFromHash();
+	const { sections, displayMode } = getRouteData(styleguide.sections, hash);
 
-	let isolatedComponent = false;
-	let isolatedExample = false;
-	let isolatedSection = false;
-
-	// Filter the requested component id required
-	if (targetName) {
-		const filteredComponents = filterComponentsInSectionsByExactName(sections, targetName);
-		if (filteredComponents.length) {
-			sections = [{ components: filteredComponents }];
-			isolatedComponent = true;
-		} else {
-			const section = findSection(sections, targetName);
-			sections = section ? [section] : [];
-			isolatedSection = true;
-		}
-
-		// If a single component or section is filtered and a fenced block index is specified hide all other examples
-		if (isFinite(targetIndex)) {
-			if (filteredComponents.length === 1) {
-				filteredComponents[0] = filterComponentExamples(filteredComponents[0], targetIndex);
-				isolatedExample = true;
-			} else if (sections.length === 1) {
-				sections[0] = filterSectionExamples(sections[0], targetIndex);
-				isolatedExample = true;
-			}
-		}
-	}
-
-	// Reset slugger for each render to be deterministic
-	slugger.reset();
-	sections = setSlugs(sections);
-
-	let documentTitle = styleguide.config.title;
-	if (isolatedComponent || isolatedExample) {
-		documentTitle = sections[0].components[0].name + ' — ' + documentTitle;
-	} else if (isolatedSection) {
-		documentTitle = sections[0].name + ' — ' + documentTitle;
-	}
-	document.title = documentTitle;
+	// Update page title
+	document.title = getPageTitle(sections, styleguide.config.title, displayMode);
 
 	// If the current hash location was set to just `/` (e.g. when navigating back from isolated view to overview)
 	// replace the URL with one without hash, to present the user with a single address of the overview screen
-	const hash = location.hash.slice(1);
-	if (hash === '/') {
+	if (hash === '#/') {
 		const url = window.location.pathname + window.location.search;
 		history.replaceState('', document.title, url);
 	}
+
+	globalizeComponents(sections);
 
 	ReactDOM.render(
 		<StyleGuide
@@ -91,9 +41,7 @@ function renderStyleguide() {
 			welcomeScreen={styleguide.welcomeScreen}
 			patterns={styleguide.patterns}
 			sections={sections}
-			isolatedComponent={isolatedComponent}
-			isolatedExample={isolatedExample}
-			isolatedSection={isolatedSection}
+			displayMode={displayMode}
 		/>,
 		document.getElementById('app')
 	);
